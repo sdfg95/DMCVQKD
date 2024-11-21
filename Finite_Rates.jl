@@ -317,7 +317,7 @@ function Margin_tol(N::T,p::T,p_sim::Matrix{T},Dvars::Vector{T},ϵ_PE::T) where 
 end
 
 function FiniteInstance(N::Real,δ::Real,Δ::Real,f::Real,T::DataType=Float64)
-
+    println("Запуск FiniteInstance с параметрами: N = $N, δ = $δ, Δ = $Δ, f = $f, T = $T")
     # Reassign data types if necessary
     N = T(N)
     δ = T(δ)

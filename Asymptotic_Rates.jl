@@ -29,7 +29,6 @@ import Hypatia.Cones
 import Integrals
 
 
-
 function integrand(vars,pars)
     γ = vars[1]
     θ = vars[2]
@@ -87,16 +86,39 @@ function Hvec(H::AbstractMatrix)
     return Hv
 end
 
-function alice_part(α::Real)
-    ρ = Hermitian(ones(Complex{typeof(α)},4,4))
-    ρ.data[1,2] = exp(-(1+im)*α^2)
-    ρ.data[1,3] = exp(-2*α^2)
-    ρ.data[1,4] = exp(-(1-im)*α^2)
-    ρ.data[2,3] = ρ.data[1,2]
-    ρ.data[2,4] = ρ.data[1,3]
-    ρ.data[3,4] = ρ.data[1,2]
-    ρ *= 0.25
+function alice_part(α::Real, phases::Vector{Real})
+    # Создаем обычную комплексную матрицу
+    temp_matrix = Matrix{Complex{typeof(α)}}(undef, 4, 4)
+    
+    # Заполняем матрицу, используя вашу формулу перекрытия
+    for n in 1:4
+        for m in 1:4
+            φ_diff = phases[n] - phases[m]
+            temp_matrix[n, m] = 1/4*exp(-abs2(α) * (1 -  cos(φ_diff)))
+        end
+    end
+    
+    # Преобразуем результат в Hermitian, учитывая только верхний треугольник
+    return Hermitian(temp_matrix)
+    # Δϕ = π / 36           # ∆ϕ = 5° в радианах
+    # σ = 0.99            # Степень несовпадения индексов модуляции
+    # m_mod = 1               # Индекс модуляции
+
+    # # Создаем комплексную матрицу
+    # temp_matrix = Matrix{Complex{typeof(α)}}(undef, 4, 4)
+
+    # # Заполняем матрицу по заданной формуле
+    # for n in 1:4
+    #     for m in 1:4
+    #         φ_diff = phases[n] - phases[m] + Δϕ
+    #         temp_matrix[n, m] = 0.25 * exp(-abs2(α) * (1 - besselj0(m_mod^2 * (1 + 2 * σ * cos(φ_diff + σ^2)))))
+    #     end
+    # end
+
+    # # Преобразуем результат в Hermitian, учитывая только верхний треугольник
+    # return Hermitian(temp_matrix)
 end
+
 
 function sinkpi4(::Type{T}, k::Integer) where {T<:AbstractFloat} #computes sin(k*π/4) with high precision
     if mod(k,4) == 0
@@ -160,7 +182,7 @@ function optimal_amplitude(D::Integer,f::Real)
         amplitudes = [1.07, 1.02, 1.01, 1.00, 0.99, 0.98, 0.97, 0.96, 0.94, 0.92, 0.90, 0.89, 0.88, 0.87, 0.86, 0.85, 0.84, 0.83, 0.82, 0.81, 0.80, 0.79, 0.79, 0.78, 0.77, 0.76, 0.76, 0.76, 0.75, 0.75, 0.74, 0.73, 0.73, 0.72, 0.72, 0.71]
         return D <= 35 ? amplitudes[D+1] : 0.71
     else # Default to f = 0
-        amplitudes = [1.07, 1.05, 1.03, 1.01, 0.99, 0.96, 0.93, 0.90, 0.87, 0.85, 0.85, 0.85, 0.84, 0.84, 0.84, 0.84, 0.83, 0.83, 0.82, 0.82, 0.81, 0.81, 0.80, 0.80, 0.79, 0.79, 0.78, 0.78, 0.77, 0.77, 0.77, 0.77, 0.77, 0.76, 0.76, 0.75, 0.75, 0.75, 0.74, 0.74, 0.74, 0.74, 0.74, 0.74, 0.74, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.71, 0.71, 0.71, 0.71, 0.71, 0.71]
+        amplitudes = [0.96, 0.93, 0.90, 0.87, 0.85, 0.85, 0.85, 0.84, 0.84, 0.84, 0.84, 0.83, 0.83, 0.82, 0.82, 0.81, 0.81, 0.80, 0.80, 0.79, 0.79, 0.78, 0.78, 0.77, 0.77, 0.77, 0.77, 0.77, 0.76, 0.76, 0.75, 0.75, 0.75, 0.74, 0.74, 0.74, 0.74, 0.74, 0.74, 0.74, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72, 0.71, 0.71, 0.71, 0.71, 0.71, 0.71]
         return D <= 70 ? amplitudes[D+1] : 0.71
     end
 end    
@@ -238,9 +260,9 @@ function hbe(::Type{T}, Nc::Integer, δ::T, Δ::T, f::T, D::Integer) where {T<:A
         # These constraints are redundant, like tr(τAB) == 1
         # @constraint(model, p_τAB[x,z] == p_sim[x,z])
     end
-
+    phases = Real[0.0, π/2, π, 3π/2]
     τA = partial_trace(T(1)*τAB, 2, [4, Nc+1])
-    @constraint(model, τA == alice_part(α)) #this already implies tr(τAB) == 1
+    @constraint(model, τA == alice_part(Real(α), phases)) #this already implies tr(τAB) == 1
 
     G = gkraus(T,Nc)
     Ghat = [I(dim_τAB)]
@@ -259,8 +281,10 @@ function hbe(::Type{T}, Nc::Integer, δ::T, Δ::T, f::T, D::Integer) where {T<:A
     @objective(model, Min, h / log(T(2)))
     @constraint(model, [h; τAB_vec] in EpiQKDTriCone{T,Complex{T}}(Ghat,Zhatperm,1 + vec_dim;blocks))
 
+    # set_optimizer(model, ProxSDP.Optimizer)
     set_optimizer(model, Hypatia.Optimizer{T})
     set_attribute(model, "verbose", true)
+    set_attribute(model, "time_limit", 300)
     optimize!(model)
 
     return value.(τAB), dual_objective_value(model)
@@ -338,15 +362,16 @@ function Instance(Nc::Integer,δ::Real,Δ::Real,f::Real,T::DataType=Float64)
     ### MAIN LOOPS
     ############################################
 
-    for D in 0:70
+    for D in 0:1:10
         @printf("Distance: %d ---------\n",D)
         CompleteCode(T,Nc,δ,Δ,f,D,NAMES)
     end
 
-    for D in 75:5:200
-        @printf("Distance: %d ---------\n",D)
-        CompleteCode(T,Nc,δ,Δ,f,D,NAMES)
-    end
+    # for D in 70:10:140
+    #     @printf("Distance: %d ---------\n",D)
+    #     CompleteCode(T,Nc,δ,Δ,f,D,NAMES)
+    # end
 
 
 end
+Instance(10, 2.0, 4.0, 0.0, Float64)
